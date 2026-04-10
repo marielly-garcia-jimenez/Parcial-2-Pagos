@@ -5,6 +5,9 @@ import com.exam.payment_service.repository.PaymentRepository;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.web.bind.annotation.*;
+import org.springframework.web.context.request.WebRequest;
+
+import java.util.List;
 
 @RestController
 @RequestMapping("/pagos")
@@ -17,33 +20,32 @@ public class PaymentController {
         this.paymentRepository = paymentRepository;
     }
 
-    @PostMapping("/procesar")
-    public Payment processPayment(@RequestBody Payment payment) {
-        log.info("Procesando pago para la orden: {}", payment.getOrdenId());
+    @PostMapping
+    public Payment createPayment(@RequestBody Payment payment, WebRequest request) {
+        log.info("Intentando crear pago para la orden: {}", payment.getOrdenId());
+        request.setAttribute("failedObject", payment, WebRequest.SCOPE_REQUEST);
+        if (payment.getOrdenId() == null || payment.getOrdenId().equals("fail")) {
+            throw new RuntimeException("Error simulado en creación de pago");
+        }
         payment.setEstado("COMPLETADO");
         return paymentRepository.save(payment);
+    }
+
+    @PostMapping("/retry")
+    public Payment createPaymentRetry(@RequestBody Payment payment) {
+        log.info("Reintentando crear pago desde Broker: {}", payment.getOrdenId());
+        return paymentRepository.save(payment);
+    }
+
+    @GetMapping
+    public List<Payment> getAllPayments() {
+        log.info("Obteniendo todos los pagos");
+        return paymentRepository.findAll();
     }
 
     @GetMapping("/{id}")
     public Payment getPayment(@PathVariable String id) {
         log.info("Obteniendo pago con id: {}", id);
         return paymentRepository.findById(id).orElse(null);
-    }
-
-    @GetMapping("/orden/{ordenId}")
-    public Payment getPaymentByOrder(@PathVariable String ordenId) {
-        log.info("Obteniendo pago para la orden: {}", ordenId);
-        return paymentRepository.findByOrdenId(ordenId).orElse(null);
-    }
-
-    @PutMapping("/{id}/reembolso")
-    public Payment refundPayment(@PathVariable String id) {
-        log.info("Reembolsando pago con id: {}", id);
-        Payment payment = paymentRepository.findById(id).orElse(null);
-        if (payment != null) {
-            payment.setEstado("REEMBOLSADO");
-            return paymentRepository.save(payment);
-        }
-        return null;
     }
 }
