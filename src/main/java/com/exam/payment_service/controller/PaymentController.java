@@ -24,16 +24,26 @@ public class PaymentController {
     public Payment createPayment(@RequestBody Payment payment, WebRequest request) {
         log.info("Intentando crear pago para la orden: {}", payment.getOrdenId());
         request.setAttribute("failedObject", payment, WebRequest.SCOPE_REQUEST);
-        if (payment.getOrdenId() == null || payment.getOrdenId().equals("fail")) {
-            throw new RuntimeException("Error simulado en creación de pago");
+        
+        // Disparar reintento si es "fail" o "fail_permanent"
+        if (payment.getOrdenId() == null || 
+            payment.getOrdenId().equalsIgnoreCase("fail") || 
+            payment.getOrdenId().equalsIgnoreCase("fail_permanent")) {
+            
+            throw new RuntimeException("Error simulado para iniciar ciclo de reintentos");
         }
+        
         payment.setEstado("COMPLETADO");
         return paymentRepository.save(payment);
     }
 
     @PostMapping("/retry")
-    public Payment createPaymentRetry(@RequestBody Payment payment) {
-        log.info("Reintentando crear pago desde Broker: {}", payment.getOrdenId());
+    public Payment saveRetry(@RequestBody Payment payment) {
+        log.info("Reintentando guardar pago desde Broker: {}", payment.getId());
+        if (payment.getOrdenId() != null && payment.getOrdenId().equalsIgnoreCase("fail_permanent")) {
+            log.warn("Simulando fallo permanente en Pago para prueba de 5 intentos");
+            throw new RuntimeException("Fallo simulado permanentemente en pago");
+        }
         return paymentRepository.save(payment);
     }
 
