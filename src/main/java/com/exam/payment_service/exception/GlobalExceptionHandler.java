@@ -20,18 +20,26 @@ public class GlobalExceptionHandler {
     }
 
     @ExceptionHandler(Exception.class)
-    public void handleAllExceptions(Exception ex, WebRequest request) {
-        log.error("Error detectado en Payment Service, enviando a Kafka para reintento: {}", ex.getMessage());
+    public org.springframework.http.ResponseEntity<String> handleAllExceptions(Exception ex, WebRequest request) {
+        log.error("Error detectado en Payment Service: {}", ex.getMessage());
         
         Object body = request.getAttribute("failedObject", WebRequest.SCOPE_REQUEST);
         
-        RetryMessage<Object> retryMessage = new RetryMessage<>(
-                body,
-                new RetryMessage.StepStatus("PENDING", "Pendiente de enviar correo"),
-                new RetryMessage.StepStatus("PENDING", "Pendiente de actualizar")
-        );
+        if (body != null) {
+            log.info("Enviando a Kafka para reintento inicial...");
+            RetryMessage<Object> retryMessage = new RetryMessage<>(
+                    body,
+                    new RetryMessage.StepStatus("PENDING", "Pendiente de enviar correo"),
+                    new RetryMessage.StepStatus("PENDING", "Pendiente de actualizar")
+            );
+            kafkaTemplate.send(TOPIC, retryMessage);
+            log.info("Mensaje de reintento enviado al tópico: {}", TOPIC);
+        } else {
+            log.warn("Fallo en operación de reintento (Broker), no se re-envía a Kafka desde aquí.");
+        }
 
-        kafkaTemplate.send(TOPIC, retryMessage);
-        log.info("Mensaje de reintento enviado al tópico: {}", TOPIC);
+        return org.springframework.http.ResponseEntity
+                .status(org.springframework.http.HttpStatus.INTERNAL_SERVER_ERROR)
+                .body("Error: " + ex.getMessage());
     }
 }
