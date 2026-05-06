@@ -15,9 +15,11 @@ public class PaymentController {
 
     private static final Logger log = LoggerFactory.getLogger(PaymentController.class);
     private final PaymentRepository paymentRepository;
+    private final org.springframework.kafka.core.KafkaTemplate<String, Object> kafkaTemplate;
 
-    public PaymentController(PaymentRepository paymentRepository) {
+    public PaymentController(PaymentRepository paymentRepository, org.springframework.kafka.core.KafkaTemplate<String, Object> kafkaTemplate) {
         this.paymentRepository = paymentRepository;
+        this.kafkaTemplate = kafkaTemplate;
     }
 
     @PostMapping
@@ -34,7 +36,13 @@ public class PaymentController {
         }
         
         payment.setEstado("COMPLETADO");
-        return paymentRepository.save(payment);
+        Payment savedPayment = paymentRepository.save(payment);
+        
+        // Notificar a través de Kafka
+        kafkaTemplate.send("payment_received_events", savedPayment);
+        log.info("Evento de pago recibido enviado a Kafka para la orden: {}", savedPayment.getOrdenId());
+        
+        return savedPayment;
     }
 
     @PostMapping("/retry")
