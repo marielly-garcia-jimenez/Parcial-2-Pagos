@@ -35,7 +35,9 @@ public class PaymentController {
             throw new RuntimeException("Error simulado para iniciar ciclo de reintentos");
         }
         
-        payment.setEstado("COMPLETADO");
+        if (payment.getEstado() == null) {
+            payment.setEstado("PAGADO");
+        }
         Payment savedPayment = paymentRepository.save(payment);
         
         // Notificar a través de Kafka
@@ -65,5 +67,52 @@ public class PaymentController {
     public Payment getPayment(@PathVariable String id) {
         log.info("Obteniendo pago con id: {}", id);
         return paymentRepository.findById(id).orElse(null);
+    }
+
+    @GetMapping("/orden/{ordenId}")
+    public List<Payment> getPaymentsByOrder(@PathVariable String ordenId) {
+        log.info("Obteniendo pagos para la orden: {}", ordenId);
+        return paymentRepository.findByOrdenId(ordenId);
+    }
+
+    @PutMapping("/{id}/status")
+    public Payment updateStatus(@PathVariable String id, @RequestBody String status) {
+        log.info("Actualizando estado para el pago {}: {}", id, status);
+        String cleanStatus = status.replace("\"", "");
+        Payment payment = paymentRepository.findById(id).orElse(null);
+        if (payment != null) {
+            payment.setEstado(cleanStatus);
+            Payment updatedPayment = paymentRepository.save(payment);
+            
+            // Si el nuevo estado es PAGADO, notificamos para que la orden se actualice
+            if ("PAGADO".equalsIgnoreCase(cleanStatus)) {
+                kafkaTemplate.send("payment_received_events", updatedPayment);
+                log.info("Evento payment_received_events enviado para pago {} (Estado: PAGADO)", updatedPayment.getId());
+            }
+            
+            return updatedPayment;
+        }
+        return null;
+    }
+
+    @PutMapping("/{id}")
+    public Payment updatePayment(@PathVariable String id, @RequestBody Payment paymentUpdate) {
+        log.info("Actualizando pago {}", id);
+        return paymentRepository.findById(id).map(existingPayment -> {
+            boolean statusChanged = paymentUpdate.getEstado() != null && !paymentUpdate.getEstado().equalsIgnoreCase(existingPayment.getEstado());
+            
+            if (paymentUpdate.getMonto() != null) existingPayment.setMonto(paymentUpdate.getMonto());
+            if (paymentUpdate.getMetodoPago() != null) existingPayment.setMetodoPago(paymentUpdate.getMetodoPago());
+            if (paymentUpdate.getEstado() != null) existingPayment.setEstado(paymentUpdate.getEstado());
+            
+            Payment saved = paymentRepository.save(existingPayment);
+            
+            if (statusChanged && "PAGADO".equalsIgnoreCase(saved.getEstado())) {
+                kafkaTemplate.send("payment_received_events", saved);
+                log.info("Evento payment_received_events enviado por actualización de pago {}", saved.getId());
+            }
+            
+            return saved;
+        }).orElse(null);
     }
 }
