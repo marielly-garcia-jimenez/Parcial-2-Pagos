@@ -102,7 +102,6 @@ public class PaymentController {
             boolean statusChanged = paymentUpdate.getEstado() != null && !paymentUpdate.getEstado().equalsIgnoreCase(existingPayment.getEstado());
             
             if (paymentUpdate.getMonto() != null) existingPayment.setMonto(paymentUpdate.getMonto());
-            if (paymentUpdate.getMetodoPago() != null) existingPayment.setMetodoPago(paymentUpdate.getMetodoPago());
             if (paymentUpdate.getEstado() != null) existingPayment.setEstado(paymentUpdate.getEstado());
             
             Payment saved = paymentRepository.save(existingPayment);
